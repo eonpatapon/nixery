@@ -52,10 +52,12 @@ var version string = "devel"
 // Regexes matching the V2 Registry API routes. This only includes the
 // routes required for serving images, since pushing and other such
 // functionality is not available.
+
 var (
-	manifestRegex = regexp.MustCompile(`^/v2/([\w|\-|\.|\_|\/]+)/manifests/([\w|\-|\.|\_]+)$`)
-	layerRegex    = regexp.MustCompile(`^/v2/([\w|\-|\.|\_|\/]+)/blobs/sha256:(\w+)$`)
-	tagsRegex     = regexp.MustCompile(`^/v2/([\w|\-|\.|\_|\/]+)/tags/list$`)
+	manifestRegex       = regexp.MustCompile(`^/v2/([\w|\-|\.|\_|\/]+)/manifests/([\w|\-|\.|\_]+)$`)
+	manifestDigestRegex = regexp.MustCompile(`^/v2/([\w|\-|\.|\_|\/]+)/manifests/sha256:([a-f0-9]+)$`)
+	layerRegex          = regexp.MustCompile(`^/v2/([\w|\-|\.|\_|\/]+)/blobs/sha256:(\w+)$`)
+	tagsRegex           = regexp.MustCompile(`^/v2/([\w|\-|\.|\_|\/]+)/tags/list$`)
 )
 
 // Downloads the popularity information for the package set from the
@@ -119,26 +121,42 @@ func (h *registryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Serve the manifest (straight from Nix)
+	var (
+		imageName   string
+		imageTag    string
+		imageDigest string
+	)
+
 	manifestMatches := manifestRegex.FindStringSubmatch(r.RequestURI)
 	if len(manifestMatches) == 3 {
-		imageName := manifestMatches[1]
-		imageTag := manifestMatches[2]
+		imageName = manifestMatches[1]
+		imageTag = manifestMatches[2]
+	}
 
+	manifestDigestMatches := manifestDigestRegex.FindStringSubmatch(r.RequestURI)
+	if len(manifestDigestMatches) == 3 {
+		imageName = manifestDigestMatches[1]
+		imageDigest = manifestDigestMatches[2]
+	}
+
+	// Serve the manifest (straight from Nix)
+	if imageName != "" && (imageTag != "" || imageDigest != "") {
 		log.WithFields(log.Fields{
-			"image": imageName,
-			"tag":   imageTag,
+			"image":  imageName,
+			"tag":    imageTag,
+			"digest": imageDigest,
 		}).Info("requesting image manifest")
 
-		image := builder.ImageFromName(imageName, imageTag)
+		image := builder.ImageFromName(imageName, imageTag, imageDigest)
 		buildResult, err := builder.BuildImage(r.Context(), h.state, &image)
 
 		if err != nil {
 			writeError(w, 500, "UNKNOWN", "image build failure")
 
 			log.WithError(err).WithFields(log.Fields{
-				"image": imageName,
-				"tag":   imageTag,
+				"image":  imageName,
+				"tag":    imageTag,
+				"digest": imageDigest,
 			}).Error("failed to build image manifest")
 
 			return
@@ -153,6 +171,7 @@ func (h *registryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(log.Fields{
 				"image":    imageName,
 				"tag":      imageTag,
+				"digest":   imageDigest,
 				"packages": buildResult.Pkgs,
 			}).Warn("could not find Nix packages")
 

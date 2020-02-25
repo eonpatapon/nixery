@@ -40,7 +40,7 @@ type PkgSource interface {
 	// The empty string means that this value is not cacheable due
 	// to the package source being a moving target (such as a
 	// channel).
-	CacheKey(pkgs []string, tag string) string
+	CacheKey(pkgs []string, tag string, digest string) string
 
 	// Return available docker tags for the current PkgSource
 	Tags() ([]string, error)
@@ -83,7 +83,12 @@ func (g *GitSource) Render(tag string) (string, string) {
 	return "git", string(j)
 }
 
-func (g *GitSource) CacheKey(pkgs []string, tag string) string {
+func (g *GitSource) CacheKey(pkgs []string, tag string, digest string) string {
+	// If a digest is given we can use it directly
+	if digest != "" {
+		return digest
+	}
+
 	// Only full commit hashes can be used for caching, as
 	// everything else is potentially a moving target.
 	if !commitRegex.MatchString(tag) {
@@ -128,7 +133,12 @@ func (n *NixChannel) Render(tag string) (string, string) {
 	return "nixpkgs", n.channel
 }
 
-func (n *NixChannel) CacheKey(pkgs []string, tag string) string {
+func (n *NixChannel) CacheKey(pkgs []string, tag string, digest string) string {
+	// If a digest is given we can use it directly
+	if digest != "" {
+		return digest
+	}
+
 	// Since Nix channels are downloaded from the nixpkgs-channels
 	// Github, users can specify full commit hashes as the
 	// "channel", in which case builds are cacheable.
@@ -154,7 +164,12 @@ func (p *PkgsPath) Render(tag string) (string, string) {
 	return "path", p.path
 }
 
-func (p *PkgsPath) CacheKey(pkgs []string, tag string) string {
+func (p *PkgsPath) CacheKey(pkgs []string, tag string, digest string) string {
+	// If a digest is given we can use it directly
+	if digest != "" {
+		return digest
+	}
+
 	// Path-based builds are not currently cacheable because we
 	// have no local hash of the package folder's state easily
 	// available.

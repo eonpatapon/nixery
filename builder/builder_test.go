@@ -14,15 +14,16 @@
 package builder
 
 import (
+	"testing"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"testing"
 )
 
 var ignoreArch = cmpopts.IgnoreFields(Image{}, "Arch")
 
 func TestImageFromNameSimple(t *testing.T) {
-	image := ImageFromName("hello", "latest")
+	image := ImageFromName("hello", "latest", "")
 	expected := Image{
 		Name: "hello",
 		Tag:  "latest",
@@ -39,7 +40,7 @@ func TestImageFromNameSimple(t *testing.T) {
 }
 
 func TestImageFromNameMultiple(t *testing.T) {
-	image := ImageFromName("hello/git/htop", "latest")
+	image := ImageFromName("hello/git/htop", "latest", "")
 	expected := Image{
 		Name: "git/hello/htop",
 		Tag:  "latest",
@@ -58,7 +59,7 @@ func TestImageFromNameMultiple(t *testing.T) {
 }
 
 func TestImageFromNameShell(t *testing.T) {
-	image := ImageFromName("shell", "latest")
+	image := ImageFromName("shell", "latest", "")
 	expected := Image{
 		Name: "shell",
 		Tag:  "latest",
@@ -78,7 +79,7 @@ func TestImageFromNameShell(t *testing.T) {
 }
 
 func TestImageFromNameShellMultiple(t *testing.T) {
-	image := ImageFromName("shell/htop", "latest")
+	image := ImageFromName("shell/htop", "latest", "")
 	expected := Image{
 		Name: "htop/shell",
 		Tag:  "latest",
@@ -99,7 +100,7 @@ func TestImageFromNameShellMultiple(t *testing.T) {
 }
 
 func TestImageFromNameShellArm64(t *testing.T) {
-	image := ImageFromName("shell/arm64", "latest")
+	image := ImageFromName("shell/arm64", "latest", "")
 	expected := Image{
 		Name: "arm64/shell",
 		Tag:  "latest",

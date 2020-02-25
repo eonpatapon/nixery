@@ -25,6 +25,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -73,8 +74,9 @@ var arm64 = Architecture{"aarch64-linux", "arm64"}
 // This can be either a list of package names (corresponding to keys in the
 // nixpkgs set) or a Nix expression that results in a *list* of derivations.
 type Image struct {
-	Name string
-	Tag  string
+	Name   string
+	Tag    string
+	Digest string
 
 	// Names of packages to include in the image. These must correspond
 	// directly to top-level names of Nix packages in the nixpkgs tree.
@@ -104,7 +106,7 @@ type BuildResult struct {
 // Once assembled the image structure uses a sorted representation of
 // the name. This is to avoid unnecessarily cache-busting images if
 // only the order of requested packages has changed.
-func ImageFromName(name string, tag string) Image {
+func ImageFromName(name string, tag string, digest string) Image {
 	pkgs := strings.Split(name, "/")
 	arch, expanded := metaPackages(pkgs)
 	expanded = append(expanded, "cacert", "iana-etc")
@@ -115,6 +117,7 @@ func ImageFromName(name string, tag string) Image {
 	return Image{
 		Name:     strings.Join(pkgs, "/"),
 		Tag:      tag,
+		Digest:   digest,
 		Packages: expanded,
 		Arch:     arch,
 	}
@@ -467,13 +470,19 @@ func uploadHashLayer(ctx context.Context, s *State, key string, lw layerWriter) 
 }
 
 func BuildImage(ctx context.Context, s *State, image *Image) (*BuildResult, error) {
-	key := s.Cfg.Pkgs.CacheKey(image.Packages, image.Tag)
+	key := s.Cfg.Pkgs.CacheKey(image.Packages, image.Tag, image.Digest)
 	if key != "" {
 		if m, c := manifestFromCache(ctx, s, key); c {
 			return &BuildResult{
 				Manifest: m,
 			}, nil
 		}
+	}
+
+	// If no manifest has been found for the digest stop here
+	// as we cannot know how to build the image
+	if image.Digest != "" {
+		return nil, errors.New(fmt.Sprintf("Image with digest %s not found", image.Digest))
 	}
 
 	imageResult, err := prepareImage(s, image)
@@ -513,6 +522,9 @@ func BuildImage(ctx context.Context, s *State, image *Image) (*BuildResult, erro
 	if key != "" {
 		go cacheManifest(ctx, s, key, m)
 	}
+
+	manifestDigest := fmt.Sprintf("%x", sha256.Sum256(m))
+	go cacheManifest(ctx, s, manifestDigest, m)
 
 	result := BuildResult{
 		Manifest: m,
